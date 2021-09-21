@@ -8,22 +8,21 @@ from time import time
 import numpy as np
 import matplotlib.pyplot as plt
 
-import pickle
-import json
+import pickle, json, sys
 
 
 
 features = ['Pleasantness', 'Intensity', 'Familiarity', 'Edability']
 
 
-def run():
+def run_all_individual(emax=0.5):
     
     for i in range(2):
         for fp in range(1,38):
-            main(i,fp)
+            main(non_standard=1, i=i, fp=fp, emax=emax)
 
 
-def main(i,fp):    
+def main(non_standard=False, i=None, fp=None, emax=0.5):    
     # based on a distance matrix (D):
     # pre1. (find pattern with largest averge overlap, p0)
     # pre2. (sort patterns based on higest overlap with p0)
@@ -40,27 +39,25 @@ def main(i,fp):
     #Dn = resort_distances(D)
     #check_trinequality(Dn)
     
-    non_standard = 1
-    perc = features[i]
-    path = '../../../../Box/Odor_similarity_data/Individual_distance_matrices/'
-    if not fp: fp = 6
-    
-    # load distance matrix
     if non_standard:
+        perc = features[i]
+        path = '../../Box/Odor_similarity_data/Individual_distance_matrices/'
+        path = 'InputDistances/'
+        if not fp: fp = 6
         fname = '{}D_fp{}_{}.json'.format(path,fp,perc)
         save_fname = 'Patterns/All_participants/pattern_fp{}_{}'.format(fp,perc)
         with open(fname, 'r') as f:
             Dn = np.array(json.load(f))
     else:
         save_fname = 0
-        with open('D.json', 'r') as f:
+        with open('D_average.json', 'r') as f:
             Dn = np.array(json.load(f))
     
     # print(Dn)
     #check_trinequality(Dn)
         
     # 1,2
-    P = set_patterns_Q(Dn, Nr=5)
+    P = set_patterns(Dn, Nr=5)
     
     #with open('Pinit.pkl', 'wb') as outfile:
     #    pickle.dump({'D':D, 'Dn':Dn, 'P':P}, outfile)
@@ -70,67 +67,43 @@ def main(i,fp):
     
     # 3
     # optimize
-    upd_pattern_Q(P,Dn, saveP=1, save_fname=save_fname)
+    upd_pattern(P,Dn, saveP=1, save_fname=save_fname, emax=emax)
     
     #plt.show()
-    plt.close('all')
+    if non_standard:
+        plt.close('all')
+    else:
+        plt.show()
 
-def upd_pattern(P,Dn, N=10, n=12, saveP=0, perc=0):    
+    
+def upd_pattern(P,Dn, N=False, saveP=False, save_fname=False, emax=0.5):    
     ''' 
-    iteratively "flip" values of idividual hypercolumns 
-    easily gets stuck in local minima. random flipping is added to minimize this risk.
+    iteratively "flip" values of idividual columns to minimize the global error
+    
+    easily gets stuck in local minima.
+        random flipping is added to get out off such states
+    
+    emax sets the maximal mean error allowed. 
+        A small value make it harder for the algorithm to compleate
     '''
     
-    error = np.zeros(N+1)
-    error[0] = hamming_distance(P,Dn)
-    best = 100
-    for i in range(N):
+    if not N:
+        Nr = [5,5,4,4,3,3,3,2,2,2,1,1,1,0,0,0,0,0]  # [3,2,1,0,0,0] #  [5,5,4,4,3,3,2,2,1,1,0,0,0,0] # 
+        N  = len(Nr)
+        randomize = True
+    else:
+        randomize = False
         
-        P           = set_patterns(Dn, P=P)
-        error[i+1]  = hamming_distance(P,Dn)
-        
-        print(i, error[i+1])
-        
-        if error[i+1] == error[i]: 
-            # add random perturbations
-            x = np.random.randint(P.shape[0], size=n)
-            y = np.random.randint(P.shape[1], size=n)
-            print(x)
-            for j in range(len(x)):
-                P[x[j],y[j]] = np.random.randint(10)
-            
-            if n >= 2: n = int(n/2)
-        
-        if error[i+1] < best:
-            Pbest = P.copy()
-            best = error[i+1]
-            
-    # plot patterns
-    plot_(Dn,Pbest, error=error, saveFig=0)
-    
-    if saveP:
-        if perc:
-            with open('patterns_{}.json'.format(perc), 'w') as f:
-                json.dump(Pbest.astype(int).tolist(), f)
-        else:
-            with open('patterns.json', 'w') as f:
-                json.dump(Pbest.astype(int).tolist(), f)
-    
-def upd_pattern_Q(P,Dn, saveP=0, save_fname=0):    
-    ''' 
-    iteratively "flip" values of idividual hypercolumns 
-    easily gets stuck in local minima. random flipping is added to minimize this risk.
-    '''
-    
-    Nr = [5,5,4,4,3,3,2,2,1,1,0,0,0,0] #  [0,0,0,0,0] # 
-    Nr = [5,5,4,4,3,3,3,2,2,2,1,1,1,0,0,0,0,0]
-    N  = len(Nr)
     error = np.zeros(N+1)
     error[0] = hamming_distance(P,Dn)
     best = 100
     for i,n in enumerate(Nr):
         
-        P           = set_patterns_Q(Dn, P=P, Nr=n)
+        if randomize:
+            P       = set_patterns(Dn, P=P, Nr=n)
+        else:
+            P       = set_patterns(Dn, P=P)
+        
         error[i+1]  = hamming_distance(P,Dn)
         
         print(i, error[i+1])
@@ -154,22 +127,22 @@ def upd_pattern_Q(P,Dn, saveP=0, save_fname=0):
         np.random.shuffle(P.T)
     
     if saveP:
-        emax = 1    #0.5
+        
         if best < emax:
             # save patterns...
             if save_fname:
                 with open('{}.json'.format(save_fname), 'w') as f:
                     json.dump(Pbest.astype(int).tolist(), f)
             else:
-                with open('patterns.json', 'w') as f:
+                with open('OutputPatterns/patterns_average.json', 'w') as f:
                     json.dump(Pbest.astype(int).tolist(), f) 
             # and plot
             plot_(Dn,Pbest, error=error, saveFig=1, save_fname=save_fname)
             
         else:
             print('--- error={:.2f} > {} --- reinitiating -----'.format(best, emax))
-            P = set_patterns_Q(Dn, Nr=5)
-            upd_pattern_Q(P,Dn,saveP=1,save_fname=save_fname)
+            P = set_patterns(Dn, Nr=5)
+            upd_pattern(P,Dn,saveP=1,save_fname=save_fname)
             
             
 
@@ -210,36 +183,11 @@ def plot_(D,P, error=[], saveFig=0, save_fname='patfig'):
         if save_fname:
             plt.savefig(save_fname, dpi=300)
         else:
-            plt.savefig('../../../../Box/Latex/Figures/setPattern_GMC_May21', dpi=300)
-    
+            plt.savefig('OutputPatterns/patterns_average', dpi=300)
 
 
-def set_patterns(D, P=[], z=0):
-    # fill pattern matrix column-vice (one Hc at a time)
-    #   **** This is the core of the algorithm ****
-    
-    if not len(P):
-        # initialize
-        if z:
-            P = np.zeros((len(D),10))
-        else:
-            P = np.random.uniform(10, size=(len(D),10))
-            P[0] = np.zeros(10)
-    
-    # set patterns using greedy algorithm.
-    for j in range(10):
-        for i in range(1,16):
-            #       calc cost of setting P[i,j] to 0-9 
-            C = np.zeros(10)
-            for m in range(10):
-                P[i,j] = m
-                C[m] = hamming_distance(P,D)
-            P[i,j] = np.argsort(C)[0]
-    
-    return P
 
-
-def set_patterns_Q(D, P=[], z=0, Nr=0):
+def set_patterns(D, P=[], z=0, Nr=0):
     # fill pattern matrix column-vice (one Hc at a time)
     #   **** This is the core of the algorithm ****
     # -> adds a portion af randomly set columns in each hypercolumn
@@ -377,6 +325,21 @@ def plot_patterns(h, ax=None):
     
     ax.set_xlabel('hypercolumns')
     ax.set_ylabel('microcolumns')
-    
 
-run()
+def sort_and_compress():
+    pass   
+
+# if run from terminal...   ===============================================================
+if __name__ == "__main__":
+    
+    if len(sys.argv) > 1: 
+        if sys.argv[1].isnumeric():
+            print('inne', sys.argv[1])
+            main(emax=float(sys.argv[1]))
+        else:
+            print('ERROR: accept single numeric argument only.\nexample run:\n\tpython gmc_sorting.py\nor\n\tpython gmc_sorting.py 0.4')
+            print('\ndefault maximal error (emax) = 0.5')
+    else:
+        main()
+    
+    
