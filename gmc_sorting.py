@@ -26,7 +26,7 @@ def run_all_individual(emax=0.5):
             main(non_standard=1, i=i, fp=fp, emax=emax)
 
 
-def main(H=10, M=10, npat=200, mean_overlap=7, non_standard=2, i=None, fp=None, emax=0.64):    
+def main(H=20, M=10, npat=40, mean_overlap=7, non_standard=4, i=None, fp=None, emax=0.4):    
     # based on a distance matrix (D):
     # 1. initialize. set p0 = 0 for all Hc. 
     #        Random values for other patterns gives best result, all zero also work.
@@ -51,27 +51,39 @@ def main(H=10, M=10, npat=200, mean_overlap=7, non_standard=2, i=None, fp=None, 
             Dn = np.array(json.load(f))
     elif non_standard==2:
         Dn = dmat.matobj(N=npat, mean=mean_overlap).matrix  
-        
+    elif non_standard==3:
+        obj = dmat.matobj(N=npat, mean=mean_overlap, initiate=False)
+        obj.random_from_XYZ_plain(H=H)
+        Dn = obj.matrix
+    elif non_standard==4:
+        obj = dmat.matobj(N=npat, mean=mean_overlap, initiate=False)
+        points = [[i,i] for i in range(0,20,2)]
+        obj.from_point_cloud(points, 3, H=H)
+        Dn = obj.matrix   
     else:
         with open('D_average.json', 'r') as f:
             Dn = np.array(json.load(f))
+    
+    print(Dn)
         
     npat = len(Dn)
     
     if not non_standard == 1: 
-        save_fname = 'OutputPatterns/multi_npat{}_emax{}'.format(npat, emax).replace('.','')
+        save_fname = 'OutputPatterns/multi_D{}_npat{}_emax{}'.format(non_standard, 
+                                                                        npat, 
+                                                                        emax).replace('.','')
     
     #check_trinequality(Dn)
         
     # 1,2
-    P = set_patterns(Dn, Nr=5)
+    P = set_patterns(Dn, H, M, Nr=5)
     
     #with open('Pinit.pkl', 'wb') as outfile:
     #    pickle.dump({'D':D, 'Dn':Dn, 'P':P}, outfile)
     
     # 3
     # optimize
-    upd_pattern(P,Dn, saveP=1, save_fname=save_fname, emax=emax)
+    upd_pattern(P,Dn, H, M, saveP=1, save_fname=save_fname, emax=emax)
     
     #plt.show()
     if non_standard==1:
@@ -80,7 +92,7 @@ def main(H=10, M=10, npat=200, mean_overlap=7, non_standard=2, i=None, fp=None, 
         plt.show()
 
     
-def upd_pattern(P,Dn, N=False, saveP=False, save_fname=False, emax=0.5):    
+def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5):    
     ''' 
     iteratively "flip" values of idividual columns to minimize the global error
     
@@ -88,7 +100,7 @@ def upd_pattern(P,Dn, N=False, saveP=False, save_fname=False, emax=0.5):
         random flipping is added to get out off such states
     
     emax sets the maximal mean error allowed. 
-        A small value make it harder for the algorithm to compleate
+        A small value make it harder for the algorithm to compleate (it might even be impossible)
     '''
     
     if not N:
@@ -99,17 +111,19 @@ def upd_pattern(P,Dn, N=False, saveP=False, save_fname=False, emax=0.5):
         randomize = False
         
     error = np.zeros(N+1)
-    error[0] = hamming_distance(P,Dn)
+    error[0] = hamming_distance(P,Dn,H)
     best = 100
     for i,n in enumerate(Nr):
         
         # update patterns
         if randomize:
-            P       = set_patterns(Dn, P=P, Nr=n)
+            # set patterns allow shuffeling...
+            P       = set_patterns(Dn, H, M, P=P, Nr=n)
         else:
-            P       = set_patterns(Dn, P=P)
+            #... while the greedy update does not
+            P       = greedy_update(D, P, H, M)
         
-        error[i+1]  = hamming_distance(P,Dn)
+        error[i+1]  = hamming_distance(P,Dn,H)
         
         print(i, error[i+1])
         
@@ -131,14 +145,16 @@ def upd_pattern(P,Dn, N=False, saveP=False, save_fname=False, emax=0.5):
         # randomly shuffle columns
         np.random.shuffle(P.T)
         
-        
+    
+    # Added while statement so that the updating without shuffeling goes on until 
+    #   the error is fixed    
     e = error[-1]
     eprev = 100
     error = list(error)
     while not eprev == e: 
-        P = set_patterns(Dn, P=P)
+        P = set_patterns(Dn, H, M, P=P)
         eprev = e
-        e = hamming_distance(P,Dn)
+        e = hamming_distance(P,Dn,H)
         
         error.append(e)
         
@@ -155,18 +171,18 @@ def upd_pattern(P,Dn, N=False, saveP=False, save_fname=False, emax=0.5):
                 with open('OutputPatterns/patterns_average.json', 'w') as f:
                     json.dump(Pbest.astype(int).tolist(), f) 
             # and plot
-            plot_(Dn,P, error=error, saveFig=1, save_fname=save_fname)
+            plot_(Dn,P, H, error=error, saveFig=1, save_fname=save_fname)
             
         else:
             print('--- error={:.2f} > {} --- reinitiating -----'.format(e, emax))
-            P = set_patterns(Dn, Nr=5)
-            upd_pattern(P,Dn,saveP=1,save_fname=save_fname, emax=emax)
+            P = set_patterns(Dn, H, M, Nr=5)
+            upd_pattern(P,Dn,H,M,saveP=1,save_fname=save_fname, emax=emax)
             
 
 
 
 @jit(nopython=True)
-def greedy_update(D, P, H=10, M=10):
+def greedy_update(D, P, H, M):
     # loop and fill the pattern matrix column-vice (one Hc at a time)
     #   **** This is the core of the algorithm ****
     
@@ -210,7 +226,7 @@ def greedy_update(D, P, H=10, M=10):
     return P
 
 
-def set_patterns(D, P=[], H=10, M=10, Nr=0):
+def set_patterns(D, H, M, P=[], Nr=0):
     # fill pattern matrix column-vice (one Hc at a time)
     #   **** This is the core of the algorithm ****
     # -> adds a portion af randomly set columns in each hypercolumn
@@ -220,9 +236,9 @@ def set_patterns(D, P=[], H=10, M=10, Nr=0):
     # initialize
     if not len(P):
         P       = np.random.uniform(M, size=(npat,H))
-        P[0]    = np.zeros(10)
+        P[0]    = np.zeros(H)
     
-    P = greedy_update(D, P, H=H, M=M)
+    P = greedy_update(D, P, H, M)
     
     # randomly perturb patterns?
     if Nr:
@@ -248,7 +264,7 @@ def calc_energy(x):
 
 
 
-def hamming_distance(a,D, H=10, return_distances=0):
+def hamming_distance(a,D, H, return_distances=0):
     
     '''
     a holds the index of the minicolumns for each hypercolumn and pattern.
@@ -330,23 +346,23 @@ def check_trinequality(D):
             assert all(D[i,j] <= D[i,:] + D[:,j])
     
 
-def plot_(D,P, error=[], saveFig=0, save_fname='patfig'):
+def plot_(D,P, H, error=[], saveFig=0, save_fname='patfig'):
     
-    d,e = hamming_distance(P,D, return_distances=1 )
+    d,e = hamming_distance(P,D, H, return_distances=1 )
     print()
     print(e)
     
     fig,ax = plt.subplots(2,3, figsize=(10,8))
     
-    ax[0,0].imshow(D, interpolation='none', aspect='equal', vmin=0, vmax=10, cmap='Greys_r')
+    ax[0,0].imshow(D, interpolation='none', aspect='equal', vmin=0, vmax=H, cmap='Greys_r')
     ax[0,0].set_title('Original distances')
-    plot_patterns(P, ax=ax[0,1])
+    plot_patterns(P, ax=ax[0,1], H=H)
     ax[0,1].set_title('Resulting patterns')
-    ax[0,1].set_ylim([-1,10])
-    ax[0,2].imshow(d, interpolation='none',aspect='equal', vmin=0, vmax=10, cmap='Greys_r')
+    #ax[0,1].set_ylim([-1,10])
+    ax[0,2].imshow(d, interpolation='none',aspect='equal', vmin=0, vmax=H, cmap='Greys_r')
     ax[0,2].set_title('From patterns. HE = {}'.format(np.around(e,2)))
     
-    ax[1,2].imshow(np.abs(d-D), interpolation='none',aspect='equal', vmin=0, vmax=10, cmap='Greys')
+    ax[1,2].imshow(np.abs(d-D), interpolation='none',aspect='equal', vmin=0, vmax=H, cmap='Greys')
     ax[1,2].set_ylabel('diff |Org-dPatterns|')
     
     ax[1,1].axis('off')
@@ -372,7 +388,7 @@ def plot_(D,P, error=[], saveFig=0, save_fname='patfig'):
             plt.savefig('OutputPatterns/patterns_average', dpi=300)
 
 
-def plot_patterns(h, ax=None):
+def plot_patterns(h, ax=None, H=None):
     
     N = len(h)
     Cgrad = [[0,n/(N-1),n/(N-1)] for n in range(N)]
@@ -380,7 +396,7 @@ def plot_patterns(h, ax=None):
     if not ax:
         fig,ax = plt.subplots(1,1)
     for i in range(h.shape[0]):
-        ax.plot(range(10), h[i], '.-', 
+        ax.plot(range(H), h[i], '.-', 
                         ms=16, mec='k', lw=1, markerfacecolor='w',
                         label='p{}'.format(i), c=Cgrad[i])
     
