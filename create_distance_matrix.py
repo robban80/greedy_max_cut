@@ -39,11 +39,13 @@ def l2dist(A):
 
 class matobj():
     
-    def __init__(self,  N=10,
+    def __init__(self,  N,
+                        H,
                         mean=None,
                         initiate=True):
         
         self.N      = N
+        self.H      = H
         self.mean   = mean
         
         if initiate:
@@ -59,7 +61,7 @@ class matobj():
         # set diagonal to zero
         np.fill_diagonal(self.matrix, 0)
     
-    def from_point_cloud(self, points, npert, H=10):
+    def from_point_cloud(self, points, npert):
         '''
         2D points in space is perturbed by adding a small quantity to the first instance (x)
         '''
@@ -81,14 +83,47 @@ class matobj():
         
         # calc distance matrix of array
         self.matrix = l2dist(A)
-        self.matrix = self.matrix / np.max(self.matrix) * (H-1)
+        self.matrix = self.matrix / np.max(self.matrix) * (self.H-1)
         
-    def random_from_XYZ_plain(self, dim=3, H=10):
+    def random_from_XYZ_plain(self, dim=3):
         
         # create random x, y and z vectors of len N
         # calc distance for each pair
         
-        self.matrix = cosdist( np.random.rand(self.N, dim) ) * H
+        self.matrix = cosdist( np.random.rand(self.N, dim) ) * self.H
+    
+    def multimodal(self,    ngroups=2,
+                            max_between_percentage=10,
+                            max_within_percentage=80,
+                            min_within_percentage=50):
+        
+        # check so that at least one pattern for each group can be created
+        if self.N < ngroups:
+            print("Argument ERROR: N is smaller than ngroups")
+            raise
+        
+        dx = int(np.floor(self.N/ngroups))
+        
+        # transform percentage overlap to distance limits
+        bm   = self.H - int(np.floor(self.H * max_between_percentage / 100))
+        wmin = self.H - int(np.floor(self.H * max_within_percentage  / 100))
+        wmax = self.H - int(np.floor(self.H * min_within_percentage  / 100)) + 1
+        
+        # initiate mother frame
+        self.matrix = np.random.randint(bm, high=self.H+1, size=(self.N,self.N))
+        
+        # initiate individual groups and add to frame
+        for i in range(ngroups):
+            self.matrix[i*dx:(i+1)*dx,i*dx:(i+1)*dx] = \
+                np.random.randint(  wmin,
+                                    wmax, 
+                                    size=(dx,dx))
+        
+        # set diagonal to 0
+        np.fill_diagonal(self.matrix, 0)
+        
+        # make symetrical
+        self.matrix = ( self.matrix + self.matrix.T ) / 2
         
     
         

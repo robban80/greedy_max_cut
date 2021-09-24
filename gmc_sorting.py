@@ -26,7 +26,7 @@ def run_all_individual(emax=0.5):
             main(non_standard=1, i=i, fp=fp, emax=emax)
 
 
-def main(H=20, M=10, npat=40, mean_overlap=7, non_standard=4, i=None, fp=None, emax=0.4):    
+def main(H=20, M=10, npat=40, mean_overlap=7, non_standard=5, i=None, fp=None, emax=0.5):    
     # based on a distance matrix (D):
     # 1. initialize. set p0 = 0 for all Hc. 
     #        Random values for other patterns gives best result, all zero also work.
@@ -50,16 +50,29 @@ def main(H=20, M=10, npat=40, mean_overlap=7, non_standard=4, i=None, fp=None, e
         with open(fname, 'r') as f:
             Dn = np.array(json.load(f))
     elif non_standard==2:
-        Dn = dmat.matobj(N=npat, mean=mean_overlap).matrix  
+        Dn = dmat.matobj(npat, H, mean=mean_overlap).matrix  
     elif non_standard==3:
-        obj = dmat.matobj(N=npat, mean=mean_overlap, initiate=False)
+        obj = dmat.matobj(npat, H, mean=mean_overlap, initiate=False)
         obj.random_from_XYZ_plain(H=H)
         Dn = obj.matrix
     elif non_standard==4:
-        obj = dmat.matobj(N=npat, mean=mean_overlap, initiate=False)
+        obj = dmat.matobj(npat, H, mean=mean_overlap, initiate=False)
         points = [[i,i] for i in range(0,20,2)]
         obj.from_point_cloud(points, 3, H=H)
         Dn = obj.matrix   
+    elif non_standard==5:
+        obj = dmat.matobj(npat, H, initiate=False)
+        ng = 10
+        obj.multimodal( ngroups=ng,
+                        max_between_percentage=10,
+                        max_within_percentage=60,
+                        min_within_percentage=40)
+        Dn = obj.matrix  
+        save_fname = 'OutputPatterns/multi_D{}_npat{}_ngroups{}_emax{}'.format(
+                        non_standard, 
+                        npat,
+                        ng, 
+                        emax).replace('.','')
     else:
         with open('D_average.json', 'r') as f:
             Dn = np.array(json.load(f))
@@ -68,7 +81,7 @@ def main(H=20, M=10, npat=40, mean_overlap=7, non_standard=4, i=None, fp=None, e
         
     npat = len(Dn)
     
-    if not non_standard == 1: 
+    if non_standard not in [1,5]: 
         save_fname = 'OutputPatterns/multi_D{}_npat{}_emax{}'.format(non_standard, 
                                                                         npat, 
                                                                         emax).replace('.','')
