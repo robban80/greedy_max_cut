@@ -26,7 +26,7 @@ def run_all_individual(emax=0.5):
             main(non_standard=1, i=i, fp=fp, emax=emax)
 
 
-def main(H=20, M=10, npat=40, mean_overlap=7, non_standard=5, i=None, fp=None, emax=0.5):    
+def main(H=10, M=10, npat=20, mean_overlap=7, non_standard=5, i=None, fp=None, emax=0.5):    
     # based on a distance matrix (D):
     # 1. initialize. set p0 = 0 for all Hc. 
     #        Random values for other patterns gives best result, all zero also work.
@@ -62,7 +62,7 @@ def main(H=20, M=10, npat=40, mean_overlap=7, non_standard=5, i=None, fp=None, e
         Dn = obj.matrix   
     elif non_standard==5:
         obj = dmat.matobj(npat, H, initiate=False)
-        ng = 10
+        ng = 3
         obj.multimodal( ngroups=ng,
                         max_between_percentage=10,
                         max_within_percentage=60,
@@ -160,12 +160,12 @@ def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5):
         
     
     # Added while statement so that the updating without shuffeling goes on until 
-    #   the error is fixed    
+    #   the error is fixed (not changing)    
     e = error[-1]
     eprev = 100
     error = list(error)
     while not eprev == e: 
-        P = set_patterns(Dn, H, M, P=P)
+        P = greedy_update(Dn, P, H, M)
         eprev = e
         e = hamming_distance(P,Dn,H)
         
@@ -177,12 +177,13 @@ def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5):
         
         if e < emax:
             # save patterns...
+            # OBS! Pbest have been exchanged for P here!
             if save_fname:
                 with open('{}.json'.format(save_fname), 'w') as f:
-                    json.dump(Pbest.astype(int).tolist(), f)
+                    json.dump(P.astype(int).tolist(), f)
             else:
                 with open('OutputPatterns/patterns_average.json', 'w') as f:
-                    json.dump(Pbest.astype(int).tolist(), f) 
+                    json.dump(P.astype(int).tolist(), f) 
             # and plot
             plot_(Dn,P, H, error=error, saveFig=1, save_fname=save_fname)
             
@@ -284,10 +285,15 @@ def hamming_distance(a,D, H, return_distances=0):
         if two patterns hold the same value for a single Hc, they have an overlap of 1.
         -e.g. [1,2,3] and [2,2,3] would have an overlap of 2
         
-        The distance is then the number of hypercolumns (M) - overlap, e.g. 3 - 2 = 1   
+        The distance is then the number of hypercolumns (H) - overlap, e.g. 3 - 2 = 1   
     '''
     
     # TODO perhaps there is some more efficient algorithm for this?
+    #   e.g. this one:
+    #
+    #       d = (a[:, None, :] != a).sum(2) #/ a.shape[1]
+    #
+    #   The above formula has been tested and gives the same result. UPDATE?
     
     npat    = a.shape[0]
     d       = np.zeros((npat,npat))
