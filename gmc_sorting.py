@@ -123,9 +123,10 @@ def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5):
     else:
         randomize = False
         
-    error = np.zeros(N+1)
-    error[0] = hamming_distance(P,Dn,H)
-    best = 100
+    error       = np.zeros(N+1)
+    error[0]    = hamming_distance(P,Dn,H)
+    best        = 100      #initialize to high value (arbitrary)
+    
     for i,n in enumerate(Nr):
         
         # update patterns
@@ -133,25 +134,26 @@ def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5):
             # set patterns allow shuffeling...
             P       = set_patterns(Dn, H, M, P=P, Nr=n)
         else:
-            #... while the greedy update does not
+            #... while the greedy_update only, does not
             P       = greedy_update(D, P, H, M)
         
         error[i+1]  = hamming_distance(P,Dn,H)
         
         print(i, error[i+1])
         
+        # if stuck in local minima
         if error[i+1] == error[i]: 
-            # add random perturbations
+            # add random perturbations. pick n x,y pairs randomly... 
             x = np.random.randint(P.shape[0], size=n)
             y = np.random.randint(P.shape[1], size=n)
             
             for j in range(len(x)):
-                P[x[j],y[j]] = np.random.randint(10)
+                P[x[j],y[j]] = np.random.randint(M) # ...and flip to random position in Hc (minicolumn)
             
-            if n >= 2: n = int(n/2)
+            
         
         elif error[i+1] < best:
-            Pbest = P.copy()    # TODO: remove? the plotting uses the last as for now...
+            Pbest = P.copy()    # TODO: remove? the plotting uses the last P as for now...
             best = error[i+1]
         
         
