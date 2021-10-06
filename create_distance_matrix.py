@@ -51,6 +51,7 @@ class matobj():
         if initiate:
             self.initiate()    
     
+    
     def initiate(self):     
         # initiate to random state
         self.matrix = np.random.randn(self.N,self.N) + self.mean
@@ -61,9 +62,59 @@ class matobj():
         # set diagonal to zero
         np.fill_diagonal(self.matrix, 0)
     
-    def from_point_cloud(self, points, npert):
+    
+    def from_point_cloud(self, npat, ngroups, sep_b_g, sep_w_g, init_max_percentage=10):
         '''
-        2D points in space is perturbed by adding a small quantity to the first instance (x)
+        creates distances with subgroups by embedding points in space.
+            subgroups are placed along separate dimensions
+        
+        if npat can not be evenly divided by ngroups, 
+            the resulting distance matrix is padded with additional orthogonal patterns
+        
+        ARGUMENTS:
+        npat = total number of patterns
+        ngroups = number of groups
+        sep_b_g = separation between groups
+        sep_w_g = separation within groups
+        
+        '''
+        
+        npat_per_group = int(npat/ngroups)
+        
+        # initiate array
+        A = np.zeros((npat_per_group*ngroups,ngroups))
+        
+        # initiate mother frame
+        m = np.floor(self.H * (100-init_max_percentage) / 100)
+        self.matrix = np.random.randint(m, high=self.H+1, size=(self.N,self.N))
+        
+        # set diagonal to 0
+        np.fill_diagonal(self.matrix, 0)
+        
+        # setup distances
+        for g in range(ngroups):
+            
+            point = np.zeros(ngroups)
+            
+            # perturb point n times
+            for n in range(npat_per_group):
+                point[g] = sep_b_g + sep_w_g*n
+                
+                # add to array
+                A[g*npat_per_group+n] = point
+        
+        # calc distance matrix of array
+        M = l2dist(A)
+        # normalize to architecture
+        M = M * (self.H-1) / np.max(M) 
+        
+        # update matrix with distances from groups
+        self.matrix[:npat_per_group*ngroups,:npat_per_group*ngroups] = M
+        
+    
+    def from_point_cloud_org(self, ngroups, npert):
+        '''
+        points in space are perturbed by adding a small quantity to a single dimension
         '''
         
         # initiate array
@@ -83,8 +134,8 @@ class matobj():
         
         # calc distance matrix of array
         self.matrix = l2dist(A)
-        self.matrix = self.matrix / np.max(self.matrix) * (self.H-1)
-        
+        self.matrix = self.matrix * (self.H-1) / np.max(self.matrix)   
+    
     def random_from_XYZ_plain(self, dim=3):
         
         # create random x, y and z vectors of len N

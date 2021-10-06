@@ -26,7 +26,7 @@ def run_all_individual(emax=0.5):
             main(non_standard=1, i=i, fp=fp, emax=emax)
 
 
-def main(H=10, M=10, npat=20, mean_overlap=7, non_standard=5, i=None, fp=None, emax=0.5):    
+def main(H=10, M=10, npat=20, mean_overlap=7, non_standard=4, i=None, fp=None, emax=0.5):    
     # based on a distance matrix (D):
     # 1. initialize. set p0 = 0 for all Hc. 
     #        Random values for other patterns gives best result, all zero also work.
@@ -57,9 +57,17 @@ def main(H=10, M=10, npat=20, mean_overlap=7, non_standard=5, i=None, fp=None, e
         Dn = obj.matrix
     elif non_standard==4:
         obj = dmat.matobj(npat, H, mean=mean_overlap, initiate=False)
-        points = [[i,i] for i in range(0,20,2)]
-        obj.from_point_cloud(points, 3, H=H)
+        ngroups = 10
+        sep_b_g = 10
+        sep_w_g = 2
+        #obj.from_point_cloud(npat, ngroups, sep_b_g, sep_w_g, init_max_percentage=10, dist='l2')
+        obj.from_point_cloud(npat, ngroups, sep_b_g, sep_w_g)
         Dn = obj.matrix   
+        save_fname = 'OutputPatterns/multi_D{}-v2_npat{}_ngroups{}_emax{}'.format(
+                        non_standard, 
+                        npat,
+                        ngroups, 
+                        emax).replace('.','')
     elif non_standard==5:
         obj = dmat.matobj(npat, H, initiate=False)
         ng = 3
@@ -81,7 +89,7 @@ def main(H=10, M=10, npat=20, mean_overlap=7, non_standard=5, i=None, fp=None, e
         
     npat = len(Dn)
     
-    if non_standard not in [1,5]: 
+    if non_standard not in [1,4,5]: 
         save_fname = 'OutputPatterns/multi_D{}_npat{}_emax{}'.format(non_standard, 
                                                                         npat, 
                                                                         emax).replace('.','')
