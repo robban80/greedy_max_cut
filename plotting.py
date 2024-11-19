@@ -7,7 +7,7 @@ import gmc_sorting as gmc
 
 def plot_(D,P, H, error=[], saveFig=0, save_fname='patfig', vmin=0, vmax=10):
     
-    d,e = gmc.hamming_distance(P,D, H, return_distances=1 )
+    d,e = gmc.hamming_distance(P,D, return_distances=1 )
     print()
     print(e)
     
@@ -18,7 +18,7 @@ def plot_(D,P, H, error=[], saveFig=0, save_fname='patfig', vmin=0, vmax=10):
     plot_patterns(P, ax=ax[0,1], H=H)
     ax[0,1].set_title('Resulting patterns')
     ax[0,2].imshow(d, interpolation='none',aspect='equal', vmin=vmin, vmax=vmax, cmap='Greys_r')
-    ax[0,2].set_title('From patterns. HE = {}'.format(np.around(e,2)))
+    ax[0,2].set_title(f'From patterns. HE = {e:.2f}')
     
     ax[1,2].imshow(np.abs(d-D), interpolation='none',aspect='equal', vmin=vmin, vmax=vmax, cmap='Greys')
     ax[1,2].set_ylabel('diff |Org-dPatterns|')

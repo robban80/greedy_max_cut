@@ -30,13 +30,21 @@ def run_all_individual(emax=0.5, min_index=1, max_index=37):
         for fp in range(min_index,max_index+1):
             main(non_standard=1, i=i, fp=fp, emax=emax)
 
+def rescale_Dn(Dn, H, input_max_value=10, input_min_value=0):
+    return Dn * (H / (input_max_value - input_min_value))
+    
 
-def main(H=10, M=10, npat=20, mean_overlap=7, non_standard=0, i=None, fp=None, emax=0.5):    
-    # based on a distance matrix (D):
-    # 1. initialize. set p0 = 0 for all Hc. 
-    #        Random values for other patterns gives best result, all zero also work.
-    # 2. fill pattern matrix column-vice based on cost and overlap
-    # 3. optimze: repeatedly flip trough the matrix (using greedy strategy)
+def main(H=10, M=10, npat=16, mean_overlap=7, non_standard=0, i=None, fp=None, emax=0.5, input_max_value=10, input_min_value=0):    
+    '''
+    based on a distance matrix (D):
+    1. initialize. set p0 = 0 for all Hc. 
+           Random values for other patterns gives best result, all zero also work.
+    2. fill pattern matrix column-vice based on cost and overlap
+    3. optimze: repeatedly flip trough the matrix (using greedy strategy)
+        
+    the distances of D is rescaled to match the number of hypercolumns (H)
+        (OBS! default values of the input distance matrix is: min=0, max=10, this should be given as arguments when running the method)
+    '''
     
     # create pattern
     #Dn = D_from_xy_plane()
@@ -90,7 +98,7 @@ def main(H=10, M=10, npat=20, mean_overlap=7, non_standard=0, i=None, fp=None, e
         with open('D_average.json', 'r') as f:
             Dn = np.array(json.load(f))
     
-    Dn = Dn
+    Dn = rescale_Dn(Dn, H)
     
     print(Dn)
     print(Dn.shape)
@@ -113,7 +121,7 @@ def main(H=10, M=10, npat=20, mean_overlap=7, non_standard=0, i=None, fp=None, e
     
     # 3
     # optimize
-    upd_pattern(P,Dn, H, M, saveP=1, save_fname=save_fname, emax=emax)
+    upd_pattern(P,Dn, H, M, saveP=1, save_fname=save_fname, emax=emax, input_max_value=input_max_value, input_min_value=input_min_value)
     
     #plt.show()
     if non_standard==1:
@@ -123,15 +131,15 @@ def main(H=10, M=10, npat=20, mean_overlap=7, non_standard=0, i=None, fp=None, e
 
 
   
-def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5):    
+def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5, input_max_value=10, input_min_value=0):    
     ''' 
-    iteratively "flip" values of idividual units to minimize the global error
+    iteratively "flip" values of individual units to minimize the global error
     
     easily gets stuck in local minima.
         random flipping is added to get out off such states
     
     emax sets the maximal mean error allowed. 
-        A small value make it harder for the algorithm to compleate (it might even be impossible)
+        A small value make it harder for the algorithm to complete (it might even be impossible)
     '''
     
     if not N:
@@ -142,7 +150,7 @@ def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5):
         randomize = False
         
     error       = np.zeros(N+1)
-    error[0]    = hamming_distance(P,Dn,H)
+    error[0]    = hamming_distance(P,Dn)
     best        = 100      #initialize to high value (arbitrary)
     
     for i,n in enumerate(Nr):
@@ -155,7 +163,7 @@ def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5):
             #... while the greedy_update only, does not
             P       = greedy_update(D, P, H, M)
         
-        error[i+1]  = hamming_distance(P,Dn,H)
+        error[i+1]  = hamming_distance(P,Dn)
         
         print(i, error[i+1])
         
@@ -176,15 +184,15 @@ def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5):
         # randomly shuffle columns
         np.random.shuffle(P.T)
         
-    # Added while statement so that the updating without shuffeling goes on until 
-    #   the error is fixed (not changing)    
+    # Added while statement so that the updating without shuffling goes on until 
+    #   the error is not changing   
     e = error[-1]
     eprev = 100
     error = list(error)
     while not eprev == e: 
         P = greedy_update(Dn, P, H, M)
         eprev = e
-        e = hamming_distance(P,Dn,H)
+        e = hamming_distance(P,Dn)
         
         error.append(e)
         
@@ -202,17 +210,17 @@ def upd_pattern(P,Dn, H, M, N=False, saveP=False, save_fname=False, emax=0.5):
                 with open('OutputPatterns/patterns_average.json', 'w') as f:
                     json.dump(P.astype(int).tolist(), f) 
             # and plot
-            plot.plot_(Dn,P, H, error=error, saveFig=1, save_fname=save_fname)
+            plot.plot_(Dn,P, H, error=error, saveFig=1, save_fname=save_fname, vmax=input_max_value, vmin=input_min_value)
             
         else:
             print('--- error={:.2f} > {} --- reinitiating -----'.format(e, emax))
             P = set_patterns(Dn, H, M, Nr=5)
-            upd_pattern(P,Dn,H,M,saveP=1,save_fname=save_fname, emax=emax)
+            upd_pattern(P,Dn,H,M,saveP=1,save_fname=save_fname, emax=emax, input_max_value=input_max_value, input_min_value=input_min_value)
             
 
 
 
-@jit(nopython=True)
+#@jit(nopython=True)
 def greedy_update(D, P, H, M):
     # loop and fill the pattern matrix column-vice (one Hc at a time)
     #   **** This is the core of the algorithm ****
@@ -226,23 +234,14 @@ def greedy_update(D, P, H, M):
             # calc optimal position of hypercolumn j in pattern i 
             #       (as the other patterns look right now)
             C = np.zeros(M)
+            
+            # loop over all minicolumns in hypercolumn
             for m in range(M):
                 
                 P[i,j] = m
                 
                 # create matrix with hamming distances of all patterns in P
-                for ii in range(npat):
-                    for jj in range(ii):
-                        o = 0
-                        for h in range(H):
-                            if P[ii,h] == P[jj,h]: o += 1
-                        
-                        # calc distance to D:
-                        #   1. number of Hc's minus the overlap -> hamming distance. 
-                        #   2. hamming distance minus target distance (from D) in relative terms ([H-o]/H)
-                        h   = (H-o)*10/H - D[ii,jj]
-                        if h < 0: h = h*(-1)    # absolut value of distance
-                        C[m]  += h
+                C[m] = hamming_distance(P,D)
                 
             # select the value with the shortest distance
             P[i,j] = np.argsort(C)[0]
@@ -253,7 +252,7 @@ def greedy_update(D, P, H, M):
 def set_patterns(D, H, M, P=[], Nr=0):
     # fill pattern matrix column-vice (one Hc at a time)
     #   **** This is the core of the algorithm ****
-    # -> adds a portion af randomly set columns in each hypercolumn
+    # -> adds a portion of randomly set columns in each hypercolumn
     
     npat = len(D)
     
@@ -280,30 +279,29 @@ def set_patterns(D, H, M, P=[], Nr=0):
     return P
 
 
-def hamming_distance(a,D, return_distances=0):
-    
+def hamming_distance(a,D, return_distances=0, input_max_value=10, input_min_value=0):
     '''
     calculates the hamming distance of the patterns in "a" 
         and returns the average difference with "D". 
-        the distance is normlalized to 10 Hc (since the input matrices are set in the range of 0-10)
     
     The hamming distance (d) is the number of units that are not the same in two patterns.
         -e.g. [1,2,3] and [2,2,3] would have a distance of 1 
             (H minus the number of overlap 3-2=1)
         
     Arguments:
-    -D (npat x npat) = the original distance matrix that "a" is calculated from
+    -D (npat x npat) = the original distance matrix that "a" is trying to match
  
     -a (npat x H)    = the array holding the unit indices for each pattern over hypercolumns.
          
     '''
     
-    d = (a[:, None, :] != a).sum(2) * 10 / a.shape[1]
+    # https://stackoverflow.com/questions/42752610/python-how-to-generate-the-pairwise-hamming-distance-matrix
+    hd = (a[:, None, :] != a).sum(2) 
     
     if return_distances:
-        return d, np.mean(np.abs(d-D))
+        return hd, np.mean(np.abs(hd-D))
     else:       
-        return np.mean(np.abs(d-D))
+        return np.mean(np.abs(hd-D))
           
 
 
@@ -358,7 +356,7 @@ def check_trinequality(D):
 
 # if run from terminal...   ===============================================================
 if __name__ == "__main__":
-    
+    # TODO: add argparser
     if len(sys.argv) > 1: 
         if sys.argv[1].isnumeric():
             print('inne', sys.argv[1])
@@ -367,6 +365,6 @@ if __name__ == "__main__":
             print('ERROR: accept single numeric argument only.\nexample run:\n\tpython gmc_sorting.py\nor\n\tpython gmc_sorting.py 0.4')
             print('\ndefault maximal error (emax) = 0.5')
     else:
-        main(H=50)
+        main(H=15, input_max_value=10, input_min_value=0)
     
     
